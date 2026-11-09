@@ -15,7 +15,10 @@
     "test": "node --test 'src/**/*.test.ts'",
     "lint": "biome check . && node scripts/no-em-dash.mjs",
     "typecheck": "tsc -p .",
-    "demo-kit": "node bin/demo-kit.mjs"
+    "demo-kit": "node bin/demo-kit.mjs",
+    "release": "release-kit release",
+    "release:check": "release-kit check && npm run lint && npm run typecheck && npm test",
+    "prepare": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
     "@remotion/bundler": "4.0.542",
@@ -29,6 +32,7 @@
     "@types/node": "24.19.2",
     "@types/react": "19.3.0",
     "playwright": "1.65.0",
+    "release-kit": "github:n8watkins/release-kit#v2.8.1",
     "typescript": "5.9.3"
   },
   "allowScripts": {
