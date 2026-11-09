@@ -1,0 +1,4 @@
+node_modules/
+takes/
+*.tmp.*
+.encode-*
