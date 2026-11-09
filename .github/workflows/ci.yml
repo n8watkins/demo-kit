@@ -1,0 +1,64 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - name: Unit tests (camera planner, pre-flight, usage)
+        run: npm test
+
+  e2e:
+    # The whole pipeline on the built-in test target: pre-flight, record, plan, render, encode.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      DEMO_KIT_USAGE: ${{ runner.temp }}/usage.jsonl
+      DEMO_KIT_TAKES: ${{ runner.temp }}/takes
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: ffmpeg (libx264, libvpx-vp9, libwebp)
+        run: sudo apt-get update -q && sudo apt-get install -yq ffmpeg
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Record the test page
+        run: node bin/demo-kit.mjs record storyboards/test-page.ts
+      - name: The desktop camera plan follows every rule
+        run: node bin/demo-kit.mjs plan "$(ls -d "$DEMO_KIT_TAKES"/test-page-*)" --strict
+      - name: Render desktop and phone
+        run: node bin/demo-kit.mjs render "$(ls -d "$DEMO_KIT_TAKES"/test-page-*)" --concurrency 2
+      - name: Check the files
+        run: |
+          out=$(ls -d "$DEMO_KIT_TAKES"/test-page-*)/out
+          ls -la "$out"
+          for f in desktop.mp4 desktop.webm phone.mp4 phone.webm; do
+            size=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 "$out/$f")
+            audio=$(ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 "$out/$f")
+            echo "$f $size"
+            case $f in desktop*) test "$size" = "1280,800" ;; phone*) test "$size" = "390,760" ;; esac
+            test -z "$audio"
+          done
+          test -s "$out/desktop-poster.webp" && test -s "$out/phone-poster.webp"
+          node bin/demo-kit.mjs usage
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-page-clips
+          path: ${{ runner.temp }}/takes/*/out/
+          if-no-files-found: ignore
