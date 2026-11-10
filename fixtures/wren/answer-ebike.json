@@ -1,0 +1,75 @@
+{
+ "capturedAt": "2026-11-10T01:08:39.712Z",
+ "model": "gemini-3.5-flash-lite",
+ "prompt": "What should I look for in an e-bike under $1,500?",
+ "chunks": [
+  {
+   "t": 0,
+   "text": "Shopping"
+  },
+  {
+   "t": 30,
+   "text": " for an e-bike under $1,500 is a great sweet"
+  },
+  {
+   "t": 109,
+   "text": " spot—you can find many reliable, feature-packed models. Here are the key things to look for:\n\n*"
+  },
+  {
+   "t": 188,
+   "text": "   **Motor and Power:** Most bikes in this price range will have a **500W to 750W rear"
+  },
+  {
+   "t": 301,
+   "text": " hub motor**. Look for a torque sensor if you want a natural pedal feel, though cadence sensors are more common at this price point."
+  },
+  {
+   "t": 363,
+   "text": "\n*   **Battery Capacity:** Aim for at least **500Wh (watt-hours)**. This generally"
+  },
+  {
+   "t": 422,
+   "text": " gives you a realistic range of 30 to 50 miles per charge, depending on your assist level and terrain"
+  },
+  {
+   "t": 485,
+   "text": ". Check if the battery is UL-certified for safety.\n*   **Brakes:** Prioritize **hydraulic disc brakes**"
+  },
+  {
+   "t": 544,
+   "text": " over mechanical ones. They offer much better stopping power and require less maintenance, which is crucial for heavier, faster e-bikes.\n*"
+  },
+  {
+   "t": 622,
+   "text": "   **Class and Speed:** Decide which Class fits your needs:\n    *   *Class 1:* Pedal-"
+  },
+  {
+   "t": 670,
+   "text": "assist only up to 20 mph.\n    *   *Class 2:* Pedal-assist and throttle up to"
+  },
+  {
+   "t": 722,
+   "text": " 20 mph.\n    *   *Class 3:* Pedal-assist up to 28 mph."
+  },
+  {
+   "t": 770,
+   "text": "\n*   **Weight and Frame:** E-bikes are heavy (often 50–70 lbs). Make"
+  },
+  {
+   "t": 840,
+   "text": " sure you can manage the weight if you need to carry it up stairs or put it on a car rack. \n*   **Warranty"
+  },
+  {
+   "t": 951,
+   "text": " and Support:** Stick to reputable brands that offer at least a 1-year warranty and have accessible customer service or local dealer"
+  },
+  {
+   "t": 990,
+   "text": " support. \n\nIf you'd like me to look up specific current models or reviews within this budget, just keep"
+  },
+  {
+   "t": 1070,
+   "text": " in mind that web research can be run from the **Research runs** page!"
+  }
+ ]
+}
