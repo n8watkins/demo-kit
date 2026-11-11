@@ -43,6 +43,9 @@ updates:
       interval: weekly
     ignore:
       - dependency-name: release-kit
+      # engines.node is >=24, so @types/node stays on 24.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     cooldown:
       default-days: 3
       semver-major-days: 7
