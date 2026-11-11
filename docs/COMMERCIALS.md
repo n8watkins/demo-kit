@@ -1,6 +1,6 @@
 # Commercials: implementation plan
 
-Status: plan, not built.
+Status: plan, not built; reviewed 2026-11-10 (final review: cost guard, licences, milestone order).
 Written 2026-11-10 from the commercial-readiness audit (https://claude.ai/artifact/L3fTaUK5ah6LhqFXyQtqeP) and the code at `main`.
 Nothing here changes the demo path.
 
@@ -11,7 +11,9 @@ Nothing here changes the demo path.
 - Add a second output type, the **commercial**: a 15 to 60 second video with several scenes, title cards, voice-over, music, sound effects and captions, built on the same engine as the demos (real recorded takes, the camera planner, `Clip`, Remotion).
 - Reuse recorded takes without re-recording: a script change or an audio change is a re-render, not a re-take.
 - Render one script into several aspect ratios (16:9, 9:16, 1:1), each with its own camera plan.
-- Cost nothing: free tiers only, with hard guards in code that refuse to spend past them.
+- Cost nothing, as a rule: **never pay**.
+  demo-kit makes **no paid or metered API calls**: not for voice, not for music, not for anything else.
+  Voice-over is free, local, open-source text to speech; everything runs on this machine or in GitHub Actions on this public repo (free minutes).
 - Keep Claude's token use low: Claude never receives video or audio.
   Code measures what can be measured, Claude looks at a few still frames, and the owner watches the final cut.
 - Track the licence of every audio asset in a manifest, and block a public release until each one is cleared.
@@ -22,7 +24,8 @@ Nothing here changes the demo path.
 - **Demos stay silent.**
   `demo-kit render` keeps `muted: true`, its two profiles (`desktop`, `phone`), its loop seam and its outputs exactly as they are.
   Commercial code lives in new modules and a new composition; the only edits to existing files are additive (see section 3.2).
-- No paid service of any kind: no paid TTS, no paid music library, no Workers Paid plan, no stock video.
+- No paid or metered service of any kind: no paid TTS, no paid music library, no stock video, and **no Cloudflare Workers AI** (or any other metered API) for voice or anything else in demo-kit.
+  The Cloudflare account is on Workers Paid, where use past the free 10,000 neurons a day is billed; keeping demo-kit out of it entirely is what makes the rule easy to hold.
 - No sending video or audio to Claude, and no per-frame image review.
 - No in-browser video editor, no timeline UI, no live preview server beyond Remotion's own.
 - No whole-window or desktop recording (a known limit of the recorder, unrelated to this work).
@@ -69,9 +72,8 @@ export interface Brand {
 }
 
 export interface VoiceConfig {
-  provider: 'cloudflare-aura' | 'kokoro'
-  /** Aura: a model id and a speaker. Kokoro: a voice id. */
-  model?: '@cf/deepgram/aura-1' | '@cf/deepgram/aura-2-en'
+  provider: 'kokoro' | 'piper'
+  /** Kokoro: a voice id such as 'af_heart'. Piper: a voice name such as 'en_US-lessac-medium'. */
   speaker: string
   /** Words per minute target used only to estimate length before any audio exists (default 150). */
   wpm?: number
@@ -178,7 +180,7 @@ Rules enforced when the script loads:
 - Every take scene names a take for every aspect in `aspects`.
 - A line must fit its scene, or the scene length is `'voice'`.
 - Captions text is the line text; there is no separate caption text, so captions can never drift from the voice.
-- `music.file` and every asset must have an entry in `licenses.json` (see 5.2).
+- `music.file` and every asset must have an entry in `licenses.json` (see 4.2).
 
 ### 2.2 Example: 15 second pipeline test
 
@@ -195,7 +197,7 @@ export default defineCommercial({
   targetSeconds: 15,
   aspects: ['16:9', '1:1'],
   brand: { name: 'Read Aloud Test', background: '#0f1115', foreground: '#f4f4f5', accent: '#4f46e5', font: 'Figtree' },
-  voice: { provider: 'cloudflare-aura', model: '@cf/deepgram/aura-1', speaker: 'asteria' },
+  voice: { provider: 'kokoro', speaker: 'TBD-after-audition' },
   music: { file: 'music/bed.mp3' },
   sfx: { clicks: true, whoosh: true },
   captions: { burnIn: true, srt: true },
@@ -230,7 +232,7 @@ export default defineCommercial({
 })
 ```
 
-This is about 140 characters of speech: roughly 190 neurons on Aura 1 (under 2% of a day's free allowance).
+This is about 140 characters of speech: roughly 10 seconds of audio, a few seconds of local synthesis.
 
 ### 2.3 Example: 30 second n8builds reel
 
@@ -250,7 +252,7 @@ export default defineCommercial({
   targetSeconds: 30,
   aspects: ['16:9', '9:16'],
   brand: { name: 'n8builds', background: '#0b0c10', foreground: '#f5f5f4', accent: '#4f46e5', font: 'Figtree', logo: 'assets/n8builds.svg' },
-  voice: { provider: 'cloudflare-aura', model: '@cf/deepgram/aura-2-en', speaker: 'TBD-after-audition' },
+  voice: { provider: 'kokoro', speaker: 'TBD-after-audition' },
   music: { file: 'music/reel-bed.mp3', bedDb: -20, duckedDb: -30 },
   sfx: { clicks: true, whoosh: true },
   captions: { burnIn: true, srt: true },
@@ -285,8 +287,8 @@ Nothing in `src/record/`, `src/camera/` or the demo CLI branches is reorganised.
 | `src/commercial/types.ts`, `define.ts`, `load.ts` | The types above, `defineCommercial()` (identity helper with the same role as `defineStoryboard`), and a loader that imports a script and validates the rules in 2.1. |
 | `src/commercial/profiles.ts` | Output profiles per aspect, built on the existing `Profile` type from `src/camera/plan.ts` (1920x1080, 1080x1920, 1080x1080). |
 | `src/commercial/lock.ts` | Resolves `take: 'latest'` to a folder and writes `commercials/<id>/commercial.lock.json` (take folder names plus the SHA-256 of each `take.json`). Builds use the lock, so a later recording never silently changes a finished commercial. |
-| `src/commercial/audio/tts.ts` | The `TtsProvider` interface, the per-line cache, and the free-allowance guard (section 4.1). |
-| `src/commercial/audio/aura.ts`, `kokoro.ts` | The two providers. |
+| `src/commercial/audio/tts.ts` | The `TtsProvider` interface, the per-line cache, and the local-only rule (section 4.1). |
+| `src/commercial/audio/kokoro.ts`, `piper.ts` | The two local providers (subprocesses). |
 | `src/commercial/audio/sfx.ts` | Generates click and whoosh WAVs from code (section 4.3). |
 | `src/commercial/audio/duck.ts` | Pure function: voice spans in, a gain envelope out (section 3.7). |
 | `src/commercial/timeline.ts` | Pure function: script plus measured line durations plus take windows in, a timeline out: each scene's start and length in frames, transitions, line start times, press times for clicks. Everything downstream reads this one structure. |
@@ -296,7 +298,6 @@ Nothing in `src/record/`, `src/camera/` or the demo CLI branches is reorganised.
 | `src/commercial/normalise.ts` | Two-pass `loudnorm` with `ffmpeg` (section 3.9). |
 | `src/commercial/encode.ts` | The web encodes (section 3.10). |
 | `src/commercial/check/` | One file per check, `report.ts` for the JSON shape, `stills.ts` (section 5). |
-| `src/commercial/ledger.ts` | The daily neuron ledger (section 4.1). |
 | `src/commercial/licenses.ts` | Reads and validates `licenses.json` (section 4.2). |
 
 Per-commercial files:
@@ -307,7 +308,8 @@ commercials/<id>/
   commercial.lock.json     resolved takes and their hashes (committed)
   licenses.json            the asset manifest (committed)
   assets/                  music, logo, fonts if any (audio files gitignored, manifest committed)
-  audio/                   cached voice lines and generated SFX (gitignored)
+  audio/                   scratch voice lines and generated SFX (gitignored)
+  voice/                   the approved voice lines of a finished commercial, small mp3s (committed, so Actions can render without TTS)
   out/                     renders, encodes, check report, stills (gitignored)
 ```
 
@@ -319,12 +321,13 @@ commercials/<id>/
 
 | Subcommand | What it does | Cost |
 | --- | --- | --- |
-| `commercial audition [--provider aura\|kokoro]` | Synthesizes one fixed sample sentence in each candidate voice into `commercials/_audition/`, for the owner to listen to. | Neurons, ledger-guarded |
-| `commercial plan <id>` | Dry run: validates the script, resolves the lock, prints the timeline, the estimated voice length from `wpm`, and the neurons the build would use (cache hits count as zero). Makes no audio and no render. | None |
-| `commercial voice <id>` | Synthesizes missing voice lines only, measures each with `ffprobe`, writes `audio/lines.json`. | Neurons, ledger-guarded |
+| `commercial setup-voice [--provider kokoro\|piper]` | Installs the voice program and model once from a pinned source, with a recorded SHA-256 (section 4.1). | None |
+| `commercial audition [--provider kokoro\|piper]` | Synthesizes the same two fixed sentences in each candidate voice locally into `commercials/_audition/`, named by provider and voice, and prints the paths so the owner can play them and pick one. | None (local CPU) |
+| `commercial plan <id>` | Dry run: validates the script, resolves the lock, prints the timeline and the estimated voice length from `wpm`. Makes no audio and no render. | None |
+| `commercial voice <id>` | Synthesizes missing voice lines only, locally, measures each with `ffprobe`, writes `audio/lines.json`. Refuses `speaker: 'TBD-after-audition'`. | None (local CPU) |
 | `commercial render <id> [--aspect <a>] [--only-scene <id>] [--concurrency <n>]` | Builds the timeline from measured lengths, renders each aspect, normalises and encodes. | None |
 | `commercial check <id> [--aspect <a>] [--release]` | Runs every check and writes `out/check.json` (section 5). `--release` also requires every licence cleared. Exit code 1 on any failed check. | None |
-| `commercial stills <id> [--scenes a,b]` | Writes three stills per scene (section 5.3). | None |
+| `commercial stills <id> [--scenes a,b]` | Writes three stills per scene (section 5.4). | None |
 | `commercial build <id>` | `voice`, `render`, `check`, `stills` in order, stopping at the first failure. | As above |
 
 Edits to existing files, all additive:
@@ -332,7 +335,7 @@ Edits to existing files, all additive:
 - `src/cli.ts`: the new `case` and a line in `HELP`.
 - `src/render/remotion/Clip.tsx`: one optional prop, `startAt?: number` (seconds into the take, default 0), added to `t = frame / p.fps + (p.startAt ?? 0)` and to the sample index. Demo renders never set it.
 - `src/render/encode.ts`: export the existing private `ffmpeg` helper.
-- `src/usage.ts`: a new `UsageEntry` kind `commercial` so `demo-kit usage` also tracks commercial builds (wall time, neurons used, output sizes).
+- `src/usage.ts`: a new `UsageEntry` kind `commercial` so `demo-kit usage` also tracks commercial builds (wall time, output sizes).
 
 The demo `render` branch, `renderTake`, the `Clip` default behaviour and `muted: true` are unchanged.
 
@@ -398,7 +401,7 @@ Unit tests cover: no spans, one span, two spans closer than the release time, a 
 - Long lines are split at punctuation, then at the word nearest the middle, to at most two lines of 42 characters.
   Split cues divide the line's time in proportion to character count.
   This is an estimate of word timing, good to a few hundred milliseconds; it is acceptable because the line start and end are exact.
-  If the owner finds it visibly off, the upgrade is Nova 3 word timestamps (472.73 neurons per audio minute, about 4 neurons per 30 s line; see the open questions).
+  If the owner finds it visibly off, the upgrade is word timestamps from a local forced alignment of the cached lines (see the open questions); nothing metered is ever called.
 - The burned-in version is a React component over the `TransitionSeries`, so captions are not faded by transitions.
 - The SRT is written from the same cues, one file per aspect.
 - Captions never contain text that is not spoken, so reading speed and sync are fully checkable from the cues.
@@ -429,80 +432,68 @@ The existing `ffmpeg` helper and `probeDuration` are reused.
 
 ## 4. Audio sources
 
-Everything here must cost zero.
+Everything here must cost zero: the rule is never pay, and demo-kit makes no paid or metered API calls.
 Every licence statement below is from memory of the providers' public terms and **must be re-verified from the provider's current page before any public release**; the manifest in 4.2 records who checked what and when.
 
 ### 4.1 Voice-over
 
-**Primary: Cloudflare Workers AI, Deepgram Aura.**
+**Local, free, open source only.**
+No voice-over step calls Cloudflare Workers AI, or any other paid or metered API.
+There is no neuron ledger and no daily cap for voice, because there is nothing metered to count.
+Everything runs on this machine's CPU, or in GitHub Actions on this public repository (free minutes).
 
-Current models and prices (Workers AI pricing page, checked 2026-11-10):
+For the record, the account-wide split of the free 10,000 neurons a day (owner decision) leaves demo-kit out of it:
 
-| Model | Id | Price | Neurons per 1,000 characters |
-| --- | --- | --- | --- |
-| Aura 1 | `@cf/deepgram/aura-1` | $0.015 per 1k characters | 1,363.64 |
-| Aura 2 English | `@cf/deepgram/aura-2-en` | $0.030 per 1k characters | 2,727.27 |
-| Aura 2 Spanish | `@cf/deepgram/aura-2-es` | $0.030 per 1k characters | 2,727.27 |
+| Consumer | Daily slice (neurons) |
+| --- | --- |
+| PortfolioRank images | 5,000 |
+| Everything else | 1,000 |
+| Buffer, never used | 4,000 |
+| **At most used** | **6,000 of 10,000** |
 
-- The free allowance is 10,000 neurons per day across the whole Cloudflare account, shared with every other project that uses Workers AI.
-  It resets at 00:00 UTC.
-- Aura 1 speakers: `angus` (default), `asteria`, `arcas`, `orion`, `orpheus`, `athena`, `luna`, `zeus`, `perseus`, `helios`, `hera`, `stella`.
-  Aura 2 speakers are listed on its model page and are read from it during M3, not hard-coded here.
-- Output encoding is selectable (`mp3`, `linear16`, `flac`, `opus`, `aac`, and more); the plan uses `mp3` for the cache and lets `ffmpeg` decode it.
-- **MeloTTS (`@cf/myshell-ai/melotts`) is planned for deprecation on 2026-11-20 and must not be used.**
-  After that date requests to it fail with HTTP 410.
-  The `TtsProvider` code does not list it.
+Later, all apps that do use Workers AI should reserve from one shared account-wide ledger; that is outside this plan.
 
-Worked costs:
+**Primary: Kokoro-82M.**
+- An open-weight 82 million parameter TTS model that runs on CPU, with no account, key or quota.
+- Licence, checked 2026-11-10: the model card (https://huggingface.co/hexgrad/Kokoro-82M) declares **Apache-2.0**, and the `kokoro` Python package (https://github.com/hexgrad/kokoro) is Apache-2.0 too.
+  This is evidence to record in the manifest, not a replacement for reading the card again before a public release (see the licence gate in 4.2).
+- It is a subprocess provider (a small Python script run with `uv`, or an ONNX build), installed outside `package.json` so the repo stays pure Node; `kokoro.ts` shells out and reads a WAV back.
+- The phonemizer it needs (`espeak-ng`, GPL-3.0) runs as a separate program and is not linked into demo-kit or its output; this must be re-read at the licence gate, together with the licence of each voice pack used.
 
-| Script | Characters (about) | Aura 1 neurons | Share of a day | Aura 2 neurons | Share of a day |
-| --- | --- | --- | --- | --- | --- |
-| 15 s pipeline test | 140 | 191 | 1.9% | 382 | 3.8% |
-| 30 s reel (about 75 words) | 420 | 573 | 5.7% | 1,146 | 11.5% |
-| Audition (4 voices x 2 models x 120 chars) | 960 | about 1,300 on Aura 1 + 2,620 on Aura 2 | 39% | | |
+**Backup: Piper.**
+- A fast local neural TTS that runs on CPU as a subprocess, used only if Kokoro sounds wrong or breaks.
+- The original `rhasspy/piper` (MIT) is archived; its maintained successor `OHF-Voice/piper1-gpl` is **GPL-3.0**.
+  Running it as a separate program does not make demo-kit or its audio GPL, but that reading must be confirmed at the licence gate.
+- **Every Piper voice has its own licence** (several are CC0 or MIT, others are CC-BY or non-commercial).
+  A Piper voice is usable only after its own model card is read and recorded in `licenses.json` (kind `voice`); a voice with a non-commercial or unclear licence is refused.
 
-The audit's "6 to 12% of a day for a 30 s script" matches these numbers.
+**Where it runs.**
+- Locally for the owner's iteration.
+- In GitHub Actions for builds that should not depend on this machine: the repository is public, so the minutes are free.
+  Actions installs Kokoro, synthesizes the missing lines and uploads them as workflow artifacts.
+- CI's own e2e uses the stub provider (section 6.3), so ordinary pull requests never download a model.
 
 **Cache.**
-Each line is stored as `commercials/<id>/audio/vo/<sha256>.mp3`, where the hash covers provider, model, speaker, encoding and the exact text.
+Each line is stored as `commercials/<id>/audio/vo/<sha256>.mp3`, where the hash covers provider, speaker, model version and the exact text.
 Editing a line synthesizes only that line.
 `audio/lines.json` maps line ids to files and measured durations.
-The cache is local and gitignored; the script and the hash recipe are enough to regenerate it.
+The scratch cache is gitignored.
+When a commercial is approved, its final lines are copied to `commercials/<id>/voice/` (a few tens of kB each) and committed, so any checkout or Actions run can render it without synthesizing again, and the voice cannot drift when the model changes.
 
-**Daily free-allowance guard (hard).**
-Requirements, all enforced in code before any network call:
+**Rules, enforced in code and tests:**
 
-1. `ledger.ts` keeps `~/.cache/demo-kit/tts-ledger.json` (outside the repo, so every checkout and worktree shares it) with neurons spent per UTC day.
-2. The estimate for a request is `ceil(characters / 1000 * rate)` using the rate table above, kept in one constant module with the date it was checked.
-3. A request is refused, with a message naming the ledger total, when `spentToday + estimate` exceeds the cap.
-   The default cap is **5,000 neurons per UTC day** (half the allowance, leaving room for other projects); an environment variable may raise it, but never above **9,000**, and the code clamps any larger value.
-4. A line that is already cached never touches the ledger.
-5. The ledger is written before the request is sent (the estimate is reserved), and corrected after the response, so a crash cannot cause an unrecorded spend.
-6. A pre-check `plan` prints the neurons a build would use and fails the build early, before any render work.
-7. On HTTP 429, or any error that names a quota, the provider stops, writes the day's total as the cap, and exits; it never retries in a loop.
-8. The guard cannot see other projects' use of the same account.
-   The owner confirms once, at M3, that the Cloudflare account is on the Free plan with no Workers Paid subscription: on the Free plan, use beyond the allowance is refused by Cloudflare rather than billed.
-   No step in this plan upgrades the plan.
-   The Workers AI dashboard shows true usage; the plan never queries it.
-
-**Secrets.**
-The Cloudflare account id and an API token scoped to Workers AI are used only through `pass-env run -- demo-kit commercial voice <id>`.
-Their names are added to the repo's `.env.pass` at M3 (names settled then; this plan does not read or name values).
-`.env*` files are never opened, and the token is never logged (the provider redacts the Authorization header in any error message).
-
-**Backup: local Kokoro.**
-- Kokoro-82M is an open-weight TTS model that runs on this machine's CPU, with no account and no quota.
-- It is a subprocess provider (a small Python script run with `uv`, or the ONNX build), installed outside `package.json` so the repo stays pure Node; `kokoro.ts` shells out and reads a WAV back.
-- It is slower and sounds different, so it is the fallback when the Cloudflare cap is reached or the free tier changes, not the first choice.
-- The model's licence (believed Apache 2.0) and the licences of its voice packs and any phonemizer it needs must be verified before public use.
+1. A provider is a local subprocess.
+   The `TtsProvider` interface has no network client, and a test fails if any file under `src/commercial/` imports an HTTP client for a voice call or names a Workers AI endpoint.
+2. Model downloads (Kokoro weights, Piper voices) happen once, by an explicit `commercial setup-voice` step the owner runs, from the pinned source URL, with a recorded SHA-256; a build never downloads anything.
+3. A missing provider or model is an error that says what to install; it never falls back to a metered service.
 
 **Voice choice needs the owner.**
-`commercial audition` produces the same two sentences in every candidate voice, named by model and speaker, into `commercials/_audition/`.
-The owner listens and picks.
-Until then the example scripts say `speaker: 'TBD-after-audition'` and `plan` refuses to run the voice step on that value.
+`commercial audition` produces the same two sentences in every candidate voice, named by provider and voice, into `commercials/_audition/`, and prints the paths.
+The owner plays them locally and picks one.
+Until then the example scripts say `speaker: 'TBD-after-audition'` and `commercial voice` refuses to run on that value.
 
 **Licence check required.**
-Deepgram's terms (https://deepgram.com/terms) as passed through Workers AI, and Cloudflare's terms for Workers AI output, must be read for: commercial use of generated audio, attribution, and any restriction on use in advertising.
+The Kokoro model card and package licence, each voice pack used, the phonemizer, and (for Piper) the program and the chosen voice's model card, must be read for: commercial use of generated audio, attribution, and any restriction on use in advertising.
 Record the result in `licenses.json` for the voice (kind `voice`).
 This is a gate for a public release, not for internal pipeline tests.
 
@@ -523,7 +514,7 @@ export interface LicenseManifest {
 }
 
 export interface LicenseEntry {
-  /** Path under commercials/<id>/ (or 'voice:cloudflare-aura' for the voice). */
+  /** Path under commercials/<id>/ (or 'voice:kokoro/<voice>' for the voice). */
   file: string
   kind: 'music' | 'sfx' | 'voice' | 'font' | 'image'
   title: string
@@ -548,6 +539,18 @@ export interface LicenseEntry {
 Without `--release` these are `warn`.
 Google Fonts used through `@remotion/google-fonts` are OFL or Apache licensed and get entries of kind `font`.
 
+**Licence gate (before any public release).**
+Nothing is published, uploaded or shared outside the owner's own machine until every item below is `cleared` in `licenses.json` by a person who read the current page on a recorded date (`verifiedAt`, no older than 90 days at release time) and saved its URL and, where the page can change, a copy or archive link:
+
+- The voice: the Kokoro model card and the chosen voice pack, or the Piper program and the chosen voice's own model card (commercial use of generated audio, attribution, advertising limits).
+- Every music track, and every sound that is not generated by our code.
+- Every font and logo.
+- Remotion: free for individuals and companies of up to 3 people; re-check the current terms and the company's size at release time.
+- The products shown: take footage of someone else's site, logo or data needs the owner's right to show it.
+
+`commercial check --release` fails on any missing, `unverified` or stale entry, and the M7 acceptance requires a passing `--release` run.
+The statements in this plan are from memory and are never the evidence; the manifest is.
+
 ### 4.3 Generated sound effects
 
 - `sfx.ts` synthesizes a click (about 20 ms of filtered noise plus a decaying 1.8 kHz sine), a soft pop, and a whoosh (band-passed noise with a rising then falling cutoff, 400 ms) as 48 kHz mono WAVs, deterministically (seeded noise), into `commercials/<id>/audio/sfx/`.
@@ -558,7 +561,7 @@ Google Fonts used through `@remotion/google-fonts` are OFL or Apache licensed an
 
 `demo-kit commercial check <id>` runs after `render`, reads only the encoded files, the timeline and the lock, and writes `commercials/<id>/out/check.json`.
 It prints one line per check and exits 1 if any check failed.
-It sends nothing to Claude and costs no tokens or neurons.
+It sends nothing to Claude and costs no tokens.
 
 ### 5.1 Checks and thresholds
 
@@ -575,7 +578,7 @@ It sends nothing to Claude and costs no tokens or neurons.
 | `silence.voice` | Voice line spans that are silent in the voice track | `silencedetect` on the voice stem | none | | any (a failed synthesis) |
 | `video.black` | Black frames | `blackdetect` d=0.1, pic_th=0.98 | none outside declared fades | | any undeclared |
 | `video.freeze` | Frozen video inside take scenes | `freezedetect` n=-60dB d=1.5 | none beyond holds the take declares | one | more than one |
-| `layout.safeArea` | Text boxes outside the safe area | layout data (5.2) | none | | any |
+| `layout.safeArea` | Text boxes outside the safe area | layout data (section 5.2) | none | | any |
 | `layout.cutText` | Take text lines the frame edge cuts through | layout data | none | one | more than one |
 | `captions.sync` | Each cue's start and end against its voice line | cues vs timeline | start within 100 ms, end within 150 ms | | beyond |
 | `captions.readability` | Characters per second, lines per cue, characters per line | cues | at most 17 cps, 2 lines, 42 chars | up to 20 cps | beyond |
@@ -584,7 +587,6 @@ It sends nothing to Claude and costs no tokens or neurons.
 | `encode.size` | File size per second | file sizes | at most 8 MB per 30 s (MP4, 1080p) | up to 1.5x | beyond |
 | `licenses.manifest` | Every asset in the script has a manifest entry with a matching hash | manifest | all | any `unverified` | missing or mismatched |
 | `licenses.release` | Every asset `cleared` (only with `--release`) | manifest | all | | any blocked |
-| `budget.neurons` | Neurons spent today and by this build against the cap | ledger | below cap | above 80% of cap | above cap (voice step would have refused) |
 
 ### 5.2 Safe areas from layout data
 
@@ -625,11 +627,11 @@ export interface CheckReport {
     status: Status
     results: CheckResult[]
   }>
-  /** Checks that are not per aspect (licences, budget). */
+  /** Checks that are not per aspect (licences). */
   global: CheckResult[]
   /** Timeline summary used by the stills pass and by Claude's review. */
   scenes: Array<{ id: string; kind: 'card' | 'take' | 'outro'; start: number; end: number; stills: string[] }>
-  budget: { neuronsToday: number; neuronsThisBuild: number; cap: number; characters: number; cacheHits: number }
+  voice: { characters: number; cacheHits: number; synthesized: number }
 }
 
 export interface CheckResult {
@@ -677,6 +679,14 @@ Token estimates (Claude tokens, per commercial):
 | Reasoning and the fix list | 6k | 2k |
 | **Total** | **about 23k, call it 25k** | **about 8k** |
 
+**The review loop is bounded**, so a commercial can never become an open-ended token sink:
+
+- One first pass (about 25k tokens) and at most **two** re-check passes (about 8k each), about 41k tokens in all per commercial.
+- A re-check looks only at the report's failing or warning checks and the stills of the scenes they name; it never re-reads the whole script or all stills.
+- Each pass appends a `note` entry (the existing `usage.jsonl` kind) with the tokens it used, so `demo-kit usage` shows the total.
+- If a third pass would be needed, or a commercial passes 50k tokens, Claude stops and asks the owner what to change instead of looping.
+- Defects the numbers can catch are fixed from `check.json` alone, without looking at stills.
+
 For comparison, sending frames at 1 per second would cost 40 to 50k tokens and at 4 per second 160 to 200k tokens, on every pass.
 No video, audio or per-frame image is ever sent.
 
@@ -706,15 +716,15 @@ CI: these run in the existing `checks` job if they take under a minute; the rend
 - `timeline.ts`: scene length from voice, fixed scenes, transition overlap arithmetic, a line that does not fit, window longer or shorter than the scene.
 - `duck.ts`: described in 3.7.
 - `captions.ts`: splitting, cue timing sums to the line, SRT formatting (timestamps, numbering, line endings).
-- `ledger.ts`: reservation, correction, UTC day rollover, cap clamping at 9,000, a refused request makes no network call (the provider is a stub that fails the test if called).
-- `tts.ts`: cache hit makes no provider call; the hash changes with text, speaker and model; Aura request shape (body and headers) against a stub, with the token redacted from errors.
+- `tts.ts`: cache hit makes no provider call; the hash changes with text, speaker and model version; the provider is a stub subprocess, and a missing model gives the install message and never a network call.
+- The no-metered-API test from 4.1: nothing under `src/commercial/` imports an HTTP client for voice or names a Workers AI endpoint.
 - `licenses.ts`: missing entry, hash mismatch, `--release` strictness.
 - `load.ts`: every rule in 2.1 has a passing and a failing script.
 - Check modules: each parser (`ebur128`, `silencedetect`, `blackdetect`, `freezedetect`, `astats` output) is tested against saved real ffmpeg output text, so no ffmpeg run is needed.
 
 ### 6.3 Commercial end-to-end (M5 onward)
 
-- The 15 s `pipeline-test` is the commercial e2e: in CI it uses a **stub TTS provider** (pre-recorded tiny tones committed as fixtures) so CI never calls Cloudflare and never spends a neuron.
+- The 15 s `pipeline-test` is the commercial e2e: in CI it uses a **stub TTS provider** (pre-recorded tiny tones committed as fixtures) so CI never downloads a model and never calls any API.
 - It asserts the whole check report: duration, loudness near -14 LUFS, true peak at most -1 dBTP, no black frames, captions in sync, and that three stills per scene exist.
 - A separate manual run with the real provider is part of M3's acceptance, not CI.
 
@@ -724,10 +734,10 @@ Both items land before any commercial code.
 
 ### 7.1 PR #4: TypeScript 7, keep `@types/node` on 24
 
-- PR #4 is the Dependabot "npm-major" group bump (two packages; CI is currently green).
-- The app runs on Node 24 (`engines.node >=24`, CI uses Node 24), so `@types/node` must stay on the 24 line; the types should describe the runtime, not a newer Node.
-- Plan: take TypeScript 7 from the PR; pin `@types/node` back to the 24.x version already in `package.json` (24.19.2 at the time of writing), by editing the PR branch (or replacing it with a branch of our own if Dependabot fights the edit).
-- Add a Dependabot `ignore` rule for `@types/node` major versions above 24 in `.github/dependabot.yml`, with a comment, so the group stops proposing it; revisit when the runtime moves.
+- PR #4 was the Dependabot "npm-major" group bump (TypeScript 7.0.2 and `@types/node` 26).
+- The app runs on Node 24 (`engines.node >=24`, CI uses Node 24), so `@types/node` stays on the 24 line; the types describe the runtime, not a newer Node.
+- Done: PR #4 was closed and replaced by a PR of our own that takes TypeScript 7.0.2, keeps `@types/node` at 24.19.2 and adds a Dependabot `ignore` rule for `@types/node` majors, with a comment.
+  Revisit the rule when the runtime moves.
 - Acceptance: `npm run typecheck`, `lint` and `test` pass; the `e2e` job passes; `package.json` shows TypeScript 7.x and `@types/node` 24.x.
 
 ### 7.2 `takes/` retention rule
@@ -745,21 +755,21 @@ The rule:
 
 - The default is a dry run that lists what would go and how many MB it frees.
 - With `--apply`, folders are **moved to the trash** with the `trash` command (never `rm`), so a mistake is recoverable for 14 days.
-- It refuses to run if a `commercial.lock.json` is missing or unreadable (it cannot know what is kept).
+- It refuses to run if a `commercials/<id>/commercial.lock.json` exists but is unreadable, or a commercial folder has none (it cannot know what is kept); with no `commercials/` folder at all (the case in M0) there is nothing to keep and it runs.
 - A unit test covers the selection logic on a fake folder tree.
 
 ## 8. Milestone plan
 
 The audit estimated 4 to 6 days in total.
-The estimates below sum to **5.5 days** of focused work, plus owner review time that is not counted.
+The estimates below sum to **5.25 days** of focused work, plus owner review time that is not counted.
 Each milestone is its own pull request (docs and code never mixed), squash-merged after green CI.
 
 | # | Milestone | Effort | Owner approval needed |
 | --- | --- | --- | --- |
-| M0 | Housekeeping: PR #4 and `takes prune` (section 7) | 0.5 day | No (review the PR) |
+| M0 | Housekeeping: PR #4 (done, replaced by our own PR) and `takes prune` (section 7) | 0.25 day | No (review the PR) |
 | M1 | Golden tests for the render path (6.1) | 0.5 day | No |
 | M2 | Script format, loader, timeline, profiles, card and take scenes, silent render (no audio yet) of the pipeline test in 16:9 and 1:1 | 1 day | No |
-| M3 | Audio: TTS providers, cache, ledger and guard, audition command, SFX, ducking, composition audio, loudness pass | 1 day | **Yes: the voice, after hearing the audition** |
+| M3 | Audio: local Kokoro (and Piper) providers, cache, setup-voice and audition commands, SFX, ducking, composition audio, loudness pass | 1 day | **Yes: the voice, after hearing the audition** |
 | M4 | Captions (burned in and SRT) and web encodes | 0.5 day | No |
 | M5 | `commercial check`, stills, `build`, stub-TTS e2e in CI | 1 day | No |
 | M6 | 9:16: phone-sized takes, per-aspect planning, safe areas | 0.5 day | **Yes: look at the 9:16 framing** |
@@ -768,7 +778,7 @@ Each milestone is its own pull request (docs and code never mixed), squash-merge
 ### Acceptance criteria
 
 **M0 Housekeeping**
-- PR #4 merged with TypeScript 7 and `@types/node` 24.x; the Dependabot ignore rule is in.
+- TypeScript 7 and `@types/node` 24.x are on `main`; the Dependabot ignore rule is in.
 - `demo-kit takes prune` dry run lists sensible candidates on the real `takes/`; `--apply` moves to trash; tests pass.
 - No change to any demo output.
 
@@ -778,18 +788,20 @@ Each milestone is its own pull request (docs and code never mixed), squash-merge
 - Test time added to CI is under 2 minutes.
 
 **M2 Script, timeline and silent render**
-- `commercial plan pipeline-test` prints a timeline and a neuron estimate and makes no network call.
+- `commercial plan pipeline-test` prints a timeline and the estimated voice length and makes no network call.
 - `commercial render pipeline-test` produces a silent 16:9 and 1:1 video with a card, a take window and an outro, joined by transitions.
 - The camera plan for each aspect has no planner warnings on the test page.
 - The demo `render` output is byte-identical to before for the same take (a regression test).
 
 **M3 Audio**
 - `commercial audition` writes labelled samples; the owner picks a voice and records it in the script.
-- A real `commercial voice` run uses a number of neurons that matches the plan's estimate within 10%, and the ledger shows it.
-- A second run uses zero neurons (cache).
-- A forced low cap makes the run refuse before any network call.
+- `commercial setup-voice` installs Kokoro from the pinned source with a recorded checksum; `commercial audition` writes labelled local samples and prints their paths; the owner plays them, picks a voice and records it in the script.
+- A real `commercial voice` run synthesizes locally, measures each line, and fills `audio/lines.json`.
+- A second run synthesizes nothing (cache).
+- A missing model fails with the install message and makes no network call.
 - Final mix is within -14 LUFS +/- 1 and at most -1.0 dBTP; music ducks under every voice line (verified by a unit test and by listening).
-- The owner confirms the Cloudflare account is on the Free plan.
+- The no-metered-API test passes (no HTTP client for voice, no Workers AI endpoint).
+- The Kokoro model card licence is re-read and recorded in `licenses.json`, still `unverified` for public release until M7.
 
 **M4 Captions and encodes**
 - Burned-in captions and an SRT match the voice lines; the SRT opens correctly in a standard player.
@@ -813,7 +825,7 @@ Each milestone is its own pull request (docs and code never mixed), squash-merge
 
 ### Which milestones the owner must approve
 
-- **M3: the voice choice**, after hearing `audition`, and the Free-plan confirmation.
+- **M3: the voice choice**, after playing the `audition` samples locally.
 - **M6: the 9:16 framing and safe-area numbers.**
 - **M7: copy, music and the final cut.**
 - M0 to M2, M4 and M5 need only the normal pull request review.
@@ -824,10 +836,10 @@ Each milestone is its own pull request (docs and code never mixed), squash-merge
 
 | Risk | Why it matters | Mitigation |
 | --- | --- | --- |
-| Licences are unverified for Aura output, Kokoro and each music track | A public video could breach terms | `licenses.json` plus `check --release`; nothing public before every entry is `cleared`; this plan's licence statements are from memory and must be re-read |
-| Free voices may sound robotic | The commercial's quality depends on it | Audition before commitment; Aura 2 and Kokoro as alternatives; the owner decides by ear |
-| Cloudflare changes the free allowance, the models or the prices | The guard's rate table goes stale | The rate table carries its check date; `plan` warns when it is older than 90 days; Kokoro is the fallback |
-| The 10,000-neuron allowance is shared with other projects | The guard cannot see their use | Default cap at 50% of the allowance; the account stays on the Free plan, where overage is refused, not billed |
+| Licences are unverified for Kokoro's voices, the phonemizer, Piper voices and each music track | A public video could breach terms | `licenses.json` plus `check --release`; nothing public before every entry is `cleared`; Kokoro's Apache-2.0 card is noted (checked 2026-11-10) but re-read at release |
+| Local voices may sound robotic | The commercial's quality depends on it | Audition before commitment; Piper as the alternative; the owner decides by ear |
+| Someone adds a metered API call later | The account is on Workers Paid, where overage is billed | The no-metered-API test (4.1) fails the build; the rule is in goals and non-goals |
+| Kokoro setup is heavy (Python, model download, espeak-ng) | Setup time and drift | One explicit `setup-voice` step with a pinned source and checksum; approved lines are committed so the voice cannot drift |
 | 9:16 needs separate phone-sized takes | The effort per product doubles for vertical | Make the mobile storyboard optional per commercial; start with 16:9 and 1:1 |
 | The 1080p profiles are not a copy of the 1280x800 ones | The planner's zoom rules depend on display width | Explicit calibration in M2 with the safe-area check as a safety net |
 | Estimated caption word timing is off | Captions look out of sync mid-line | Line start and end are exact; if it shows, add word timestamps (open question 3) |
@@ -840,12 +852,12 @@ Each milestone is its own pull request (docs and code never mixed), squash-merge
 
 1. **Which voice?**
    Decided by the owner after the audition in M3.
-2. **Aura 1 or Aura 2?**
-   Aura 2 is twice the neurons per character (still about 11.5% of a day for the reel); it is probably worth it, but the audition decides.
+2. **Kokoro or Piper?**
+   Kokoro is the default; the audition decides, and Piper needs a per-voice licence check.
 3. **Are estimated word timings enough for captions?**
-   If not, use Nova 3 on the cached voice lines (472.73 neurons per audio minute on HTTP, about 4 neurons per 30 s line), also behind the ledger.
-4. **Does the Cloudflare free plan refuse or throttle past 10,000 neurons?**
-   The docs say the free allowance is 10,000 neurons per day; the exact refusal behaviour (error code) should be confirmed once in M3 with a deliberately tiny experiment on a throwaway low cap, not by exhausting the allowance.
+   If not, run a local forced alignment (for example whisper.cpp, MIT, to be licence-checked) on the cached lines to get word timestamps.
+4. **Do the approved voice lines live in the repo or as artifacts?**
+   The plan commits them (small), so renders are reproducible; if the owner prefers artifacts only, `voice/` becomes a workflow download.
 5. **Which music?**
    No track is chosen; CC0 only is the default, and "no music" is a valid answer for the reel.
 6. **Where do the 9:16 phone-sized recordings come from for Wren, NetTrailers and PortfolioRank?**
@@ -856,5 +868,5 @@ Each milestone is its own pull request (docs and code never mixed), squash-merge
    The plan says no: windows trim, they never speed up or slow down a take.
 9. **Where are finished commercials stored for publishing?**
    `out/` is gitignored; the owner decides whether the final MP4 is uploaded to n8builds.dev's assets or elsewhere.
-10. **Should `usage.jsonl` record neurons and build time for commercials?**
+10. **Should `usage.jsonl` record build time for commercials?**
     The plan adds a `commercial` entry kind; if the owner prefers a separate file, that is a small change.
