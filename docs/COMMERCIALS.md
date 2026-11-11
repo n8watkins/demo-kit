@@ -1,6 +1,6 @@
 # Commercials: implementation plan
 
-Status: plan, not built.
+Status: plan, not built; reviewed 2026-11-10 (final review: cost guard, licences, milestone order).
 Written 2026-11-10 from the commercial-readiness audit (https://claude.ai/artifact/L3fTaUK5ah6LhqFXyQtqeP) and the code at `main`.
 Nothing here changes the demo path.
 
@@ -11,7 +11,9 @@ Nothing here changes the demo path.
 - Add a second output type, the **commercial**: a 15 to 60 second video with several scenes, title cards, voice-over, music, sound effects and captions, built on the same engine as the demos (real recorded takes, the camera planner, `Clip`, Remotion).
 - Reuse recorded takes without re-recording: a script change or an audio change is a re-render, not a re-take.
 - Render one script into several aspect ratios (16:9, 9:16, 1:1), each with its own camera plan.
-- Cost nothing: free tiers only, with hard guards in code that refuse to spend past them.
+- Cost nothing, as a rule: **never pay**.
+  Free tiers only, and the code fails closed before it can spend past them (section 4.1).
+  The Cloudflare account is on Workers Paid ($5 a month), so going over the free 10,000 neurons a day would be billed, not refused; the guard in code is the only protection.
 - Keep Claude's token use low: Claude never receives video or audio.
   Code measures what can be measured, Claude looks at a few still frames, and the owner watches the final cut.
 - Track the licence of every audio asset in a manifest, and block a public release until each one is cleared.
@@ -22,7 +24,8 @@ Nothing here changes the demo path.
 - **Demos stay silent.**
   `demo-kit render` keeps `muted: true`, its two profiles (`desktop`, `phone`), its loop seam and its outputs exactly as they are.
   Commercial code lives in new modules and a new composition; the only edits to existing files are additive (see section 3.2).
-- No paid service of any kind: no paid TTS, no paid music library, no Workers Paid plan, no stock video.
+- No paid usage of any kind: no paid TTS, no paid music library, no stock video, and no Workers AI neuron beyond the free daily allowance (the account is on Workers Paid, so overage bills).
+  No step in this plan upgrades, downgrades or otherwise changes the Cloudflare plan.
 - No sending video or audio to Claude, and no per-frame image review.
 - No in-browser video editor, no timeline UI, no live preview server beyond Remotion's own.
 - No whole-window or desktop recording (a known limit of the recorder, unrelated to this work).
@@ -178,7 +181,7 @@ Rules enforced when the script loads:
 - Every take scene names a take for every aspect in `aspects`.
 - A line must fit its scene, or the scene length is `'voice'`.
 - Captions text is the line text; there is no separate caption text, so captions can never drift from the voice.
-- `music.file` and every asset must have an entry in `licenses.json` (see 5.2).
+- `music.file` and every asset must have an entry in `licenses.json` (see 4.2).
 
 ### 2.2 Example: 15 second pipeline test
 
@@ -230,7 +233,7 @@ export default defineCommercial({
 })
 ```
 
-This is about 140 characters of speech: roughly 190 neurons on Aura 1 (under 2% of a day's free allowance).
+This is about 140 characters of speech: roughly 190 neurons on Aura 1 (under 10% of demo-kit's 2,000 neuron daily slice).
 
 ### 2.3 Example: 30 second n8builds reel
 
@@ -319,12 +322,12 @@ commercials/<id>/
 
 | Subcommand | What it does | Cost |
 | --- | --- | --- |
-| `commercial audition [--provider aura\|kokoro]` | Synthesizes one fixed sample sentence in each candidate voice into `commercials/_audition/`, for the owner to listen to. | Neurons, ledger-guarded |
+| `commercial audition [--provider aura\|kokoro] [--model aura-1\|aura-2]` | Synthesizes one fixed 100 character sample in each of three candidate voices, one model per run, into `commercials/_audition/`, for the owner to listen to. About 410 neurons on Aura 1 or 820 on Aura 2. | Neurons, ledger-guarded |
 | `commercial plan <id>` | Dry run: validates the script, resolves the lock, prints the timeline, the estimated voice length from `wpm`, and the neurons the build would use (cache hits count as zero). Makes no audio and no render. | None |
 | `commercial voice <id>` | Synthesizes missing voice lines only, measures each with `ffprobe`, writes `audio/lines.json`. | Neurons, ledger-guarded |
 | `commercial render <id> [--aspect <a>] [--only-scene <id>] [--concurrency <n>]` | Builds the timeline from measured lengths, renders each aspect, normalises and encodes. | None |
 | `commercial check <id> [--aspect <a>] [--release]` | Runs every check and writes `out/check.json` (section 5). `--release` also requires every licence cleared. Exit code 1 on any failed check. | None |
-| `commercial stills <id> [--scenes a,b]` | Writes three stills per scene (section 5.3). | None |
+| `commercial stills <id> [--scenes a,b]` | Writes three stills per scene (section 5.4). | None |
 | `commercial build <id>` | `voice`, `render`, `check`, `stills` in order, stopping at the first failure. | As above |
 
 Edits to existing files, all additive:
@@ -429,7 +432,7 @@ The existing `ffmpeg` helper and `probeDuration` are reused.
 
 ## 4. Audio sources
 
-Everything here must cost zero.
+Everything here must cost zero (the rule is never pay; see the guard in 4.1).
 Every licence statement below is from memory of the providers' public terms and **must be re-verified from the provider's current page before any public release**; the manifest in 4.2 records who checked what and when.
 
 ### 4.1 Voice-over
@@ -444,7 +447,7 @@ Current models and prices (Workers AI pricing page, checked 2026-11-10):
 | Aura 2 English | `@cf/deepgram/aura-2-en` | $0.030 per 1k characters | 2,727.27 |
 | Aura 2 Spanish | `@cf/deepgram/aura-2-es` | $0.030 per 1k characters | 2,727.27 |
 
-- The free allowance is 10,000 neurons per day across the whole Cloudflare account, shared with every other project that uses Workers AI.
+- The free allowance is 10,000 neurons per day across the whole Cloudflare account, shared with every other project that uses Workers AI; demo-kit may use 2,000 of them (see the guard below).
   It resets at 00:00 UTC.
 - Aura 1 speakers: `angus` (default), `asteria`, `arcas`, `orion`, `orpheus`, `athena`, `luna`, `zeus`, `perseus`, `helios`, `hera`, `stella`.
   Aura 2 speakers are listed on its model page and are read from it during M3, not hard-coded here.
@@ -455,13 +458,13 @@ Current models and prices (Workers AI pricing page, checked 2026-11-10):
 
 Worked costs:
 
-| Script | Characters (about) | Aura 1 neurons | Share of a day | Aura 2 neurons | Share of a day |
+| Script | Characters (about) | Aura 1 neurons | Share of the 2,000 slice | Aura 2 neurons | Share of the 2,000 slice |
 | --- | --- | --- | --- | --- | --- |
-| 15 s pipeline test | 140 | 191 | 1.9% | 382 | 3.8% |
-| 30 s reel (about 75 words) | 420 | 573 | 5.7% | 1,146 | 11.5% |
-| Audition (4 voices x 2 models x 120 chars) | 960 | about 1,300 on Aura 1 + 2,620 on Aura 2 | 39% | | |
+| 15 s pipeline test | 140 | 191 | 9.6% | 382 | 19% |
+| 30 s reel (about 75 words) | 420 | 573 | 29% | 1,146 | 57% |
+| Audition (3 voices x 100 chars, one model per run) | 300 | 409 | 20% | 818 | 41% |
 
-The audit's "6 to 12% of a day for a 30 s script" matches these numbers.
+The audit's "6 to 12% of a day for a 30 s script" is of the whole 10,000 allowance; against demo-kit's own slice it is 29% (Aura 1) or 57% (Aura 2).
 
 **Cache.**
 Each line is stored as `commercials/<id>/audio/vo/<sha256>.mp3`, where the hash covers provider, model, speaker, encoding and the exact text.
@@ -469,21 +472,47 @@ Editing a line synthesizes only that line.
 `audio/lines.json` maps line ids to files and measured durations.
 The cache is local and gitignored; the script and the hash recipe are enough to regenerate it.
 
-**Daily free-allowance guard (hard).**
-Requirements, all enforced in code before any network call:
+**Daily free-allowance guard (hard, mandatory, fails closed).**
+The Cloudflare account is on **Workers Paid** ($5 a month).
+Past the free 10,000 neurons a day, Workers AI is **billed** (about $0.011 per 1,000 neurons), not refused.
+So the guard below is not an optimisation: it is the only thing between this tool and a bill.
+It is a release blocker for M3, and no code path may call Workers AI without it.
+
+The rule is **never pay**: the account as a whole must never pass 10,000 neurons in a UTC day.
+That allowance is split into fixed slices, one per consumer:
+
+| Consumer | Daily slice (neurons) |
+| --- | --- |
+| PortfolioRank images | 5,000 |
+| demo-kit voice-over | 2,000 |
+| Everything else | 1,000 |
+| Buffer, never used | 2,000 |
+| **Total** | **10,000** |
+
+demo-kit's slice is **2,000 neurons a day, as both the default and the maximum**.
+Configuration that sets a higher cap is rejected at startup with an error (it is not clamped silently), and nothing reads a cap from the environment that is above 2,000.
+A 30 second Aura 1 voice-over (about 600 neurons) fits three times a day; an Aura 2 one (about 1,150 to 1,200) fits once a day.
+
+Requirements, all enforced in code before any network call, and every failure path ends in a refusal, never in a spend:
 
 1. `ledger.ts` keeps `~/.cache/demo-kit/tts-ledger.json` (outside the repo, so every checkout and worktree shares it) with neurons spent per UTC day.
+   It is the only record the guard trusts; a missing, unreadable or corrupt ledger **refuses** (fail closed) until the owner repairs it, and never counts as zero.
 2. The estimate for a request is `ceil(characters / 1000 * rate)` using the rate table above, kept in one constant module with the date it was checked.
-3. A request is refused, with a message naming the ledger total, when `spentToday + estimate` exceeds the cap.
-   The default cap is **5,000 neurons per UTC day** (half the allowance, leaving room for other projects); an environment variable may raise it, but never above **9,000**, and the code clamps any larger value.
+   The estimate rounds up, and an unknown model has no rate and is refused.
+3. A request is refused, with a message naming the ledger total, when `spentToday + estimate` exceeds the cap (2,000, never higher).
 4. A line that is already cached never touches the ledger.
-5. The ledger is written before the request is sent (the estimate is reserved), and corrected after the response, so a crash cannot cause an unrecorded spend.
+5. The ledger is written (and flushed) before the request is sent, as a reservation of the estimate, and corrected after the response, so a crash cannot cause an unrecorded spend.
+   Concurrent processes take a file lock for the reserve step, so two builds cannot both pass the check.
 6. A pre-check `plan` prints the neurons a build would use and fails the build early, before any render work.
-7. On HTTP 429, or any error that names a quota, the provider stops, writes the day's total as the cap, and exits; it never retries in a loop.
-8. The guard cannot see other projects' use of the same account.
-   The owner confirms once, at M3, that the Cloudflare account is on the Free plan with no Workers Paid subscription: on the Free plan, use beyond the allowance is refused by Cloudflare rather than billed.
-   No step in this plan upgrades the plan.
+7. **No retries.**
+   On HTTP 429, any 5xx, a timeout, or any error that names a quota, the provider stops and exits: it does not retry, back off or fall through to another model.
+   After an error the reservation is kept as spent (the request may have been billed), and the day's total is raised to the cap if the error names a quota.
+8. The guard cannot see other consumers' use of the same account, so each of them has its own slice and its own cap, and the slice table above is the contract.
    The Workers AI dashboard shows true usage; the plan never queries it.
+   The owner checks the dashboard weekly while the slices are enforced per app.
+9. **Later: one shared account-wide ledger.**
+   All apps that use Workers AI should reserve from a single ledger (one file or service with per-app slices and a total that can never pass 10,000) instead of each keeping its own.
+   That is a follow-up outside this plan; until it exists, the per-app caps and the unused buffer are what keep the total under the allowance.
 
 **Secrets.**
 The Cloudflare account id and an API token scoped to Workers AI are used only through `pass-env run -- demo-kit commercial voice <id>`.
@@ -548,6 +577,19 @@ export interface LicenseEntry {
 Without `--release` these are `warn`.
 Google Fonts used through `@remotion/google-fonts` are OFL or Apache licensed and get entries of kind `font`.
 
+**Licence gate (before any public release).**
+Nothing is published, uploaded or shared outside the owner's own machine until every item below is `cleared` in `licenses.json` by a person who read the current page on a recorded date (`verifiedAt`, no older than 90 days at release time) and saved its URL and, where the page can change, a copy or archive link:
+
+- The voice: Deepgram's terms as passed through Workers AI, and Cloudflare's Workers AI terms (commercial use of generated audio, attribution, advertising limits).
+- Kokoro and its voice packs, only if it was used.
+- Every music track, and every sound that is not generated by our code.
+- Every font and logo.
+- Remotion: free for individuals and companies of up to 3 people; re-check the current terms and the company's size at release time.
+- The products shown: take footage of someone else's site, logo or data needs the owner's right to show it.
+
+`commercial check --release` fails on any missing, `unverified` or stale entry, and the M7 acceptance requires a passing `--release` run.
+The statements in this plan are from memory and are never the evidence; the manifest is.
+
 ### 4.3 Generated sound effects
 
 - `sfx.ts` synthesizes a click (about 20 ms of filtered noise plus a decaying 1.8 kHz sine), a soft pop, and a whoosh (band-passed noise with a rising then falling cutoff, 400 ms) as 48 kHz mono WAVs, deterministically (seeded noise), into `commercials/<id>/audio/sfx/`.
@@ -575,7 +617,7 @@ It sends nothing to Claude and costs no tokens or neurons.
 | `silence.voice` | Voice line spans that are silent in the voice track | `silencedetect` on the voice stem | none | | any (a failed synthesis) |
 | `video.black` | Black frames | `blackdetect` d=0.1, pic_th=0.98 | none outside declared fades | | any undeclared |
 | `video.freeze` | Frozen video inside take scenes | `freezedetect` n=-60dB d=1.5 | none beyond holds the take declares | one | more than one |
-| `layout.safeArea` | Text boxes outside the safe area | layout data (5.2) | none | | any |
+| `layout.safeArea` | Text boxes outside the safe area | layout data (section 5.2) | none | | any |
 | `layout.cutText` | Take text lines the frame edge cuts through | layout data | none | one | more than one |
 | `captions.sync` | Each cue's start and end against its voice line | cues vs timeline | start within 100 ms, end within 150 ms | | beyond |
 | `captions.readability` | Characters per second, lines per cue, characters per line | cues | at most 17 cps, 2 lines, 42 chars | up to 20 cps | beyond |
@@ -677,6 +719,14 @@ Token estimates (Claude tokens, per commercial):
 | Reasoning and the fix list | 6k | 2k |
 | **Total** | **about 23k, call it 25k** | **about 8k** |
 
+**The review loop is bounded**, so a commercial can never become an open-ended token sink:
+
+- One first pass (about 25k tokens) and at most **two** re-check passes (about 8k each), about 41k tokens in all per commercial.
+- A re-check looks only at the report's failing or warning checks and the stills of the scenes they name; it never re-reads the whole script or all stills.
+- Each pass appends a `note` entry (the existing `usage.jsonl` kind) with the tokens it used, so `demo-kit usage` shows the total.
+- If a third pass would be needed, or a commercial passes 50k tokens, Claude stops and asks the owner what to change instead of looping.
+- Defects the numbers can catch are fixed from `check.json` alone, without looking at stills.
+
 For comparison, sending frames at 1 per second would cost 40 to 50k tokens and at 4 per second 160 to 200k tokens, on every pass.
 No video, audio or per-frame image is ever sent.
 
@@ -706,7 +756,7 @@ CI: these run in the existing `checks` job if they take under a minute; the rend
 - `timeline.ts`: scene length from voice, fixed scenes, transition overlap arithmetic, a line that does not fit, window longer or shorter than the scene.
 - `duck.ts`: described in 3.7.
 - `captions.ts`: splitting, cue timing sums to the line, SRT formatting (timestamps, numbering, line endings).
-- `ledger.ts`: reservation, correction, UTC day rollover, cap clamping at 9,000, a refused request makes no network call (the provider is a stub that fails the test if called).
+- `ledger.ts`: reservation, correction, UTC day rollover, rejection of a cap above 2,000, fail closed on a corrupt ledger, no retry after an error, a refused request makes no network call (the provider is a stub that fails the test if called).
 - `tts.ts`: cache hit makes no provider call; the hash changes with text, speaker and model; Aura request shape (body and headers) against a stub, with the token redacted from errors.
 - `licenses.ts`: missing entry, hash mismatch, `--release` strictness.
 - `load.ts`: every rule in 2.1 has a passing and a failing script.
@@ -724,10 +774,10 @@ Both items land before any commercial code.
 
 ### 7.1 PR #4: TypeScript 7, keep `@types/node` on 24
 
-- PR #4 is the Dependabot "npm-major" group bump (two packages; CI is currently green).
-- The app runs on Node 24 (`engines.node >=24`, CI uses Node 24), so `@types/node` must stay on the 24 line; the types should describe the runtime, not a newer Node.
-- Plan: take TypeScript 7 from the PR; pin `@types/node` back to the 24.x version already in `package.json` (24.19.2 at the time of writing), by editing the PR branch (or replacing it with a branch of our own if Dependabot fights the edit).
-- Add a Dependabot `ignore` rule for `@types/node` major versions above 24 in `.github/dependabot.yml`, with a comment, so the group stops proposing it; revisit when the runtime moves.
+- PR #4 was the Dependabot "npm-major" group bump (TypeScript 7.0.2 and `@types/node` 26).
+- The app runs on Node 24 (`engines.node >=24`, CI uses Node 24), so `@types/node` stays on the 24 line; the types describe the runtime, not a newer Node.
+- Done: PR #4 was closed and replaced by a PR of our own that takes TypeScript 7.0.2, keeps `@types/node` at 24.19.2 and adds a Dependabot `ignore` rule for `@types/node` majors, with a comment.
+  Revisit the rule when the runtime moves.
 - Acceptance: `npm run typecheck`, `lint` and `test` pass; the `e2e` job passes; `package.json` shows TypeScript 7.x and `@types/node` 24.x.
 
 ### 7.2 `takes/` retention rule
@@ -745,18 +795,18 @@ The rule:
 
 - The default is a dry run that lists what would go and how many MB it frees.
 - With `--apply`, folders are **moved to the trash** with the `trash` command (never `rm`), so a mistake is recoverable for 14 days.
-- It refuses to run if a `commercial.lock.json` is missing or unreadable (it cannot know what is kept).
+- It refuses to run if a `commercials/<id>/commercial.lock.json` exists but is unreadable, or a commercial folder has none (it cannot know what is kept); with no `commercials/` folder at all (the case in M0) there is nothing to keep and it runs.
 - A unit test covers the selection logic on a fake folder tree.
 
 ## 8. Milestone plan
 
 The audit estimated 4 to 6 days in total.
-The estimates below sum to **5.5 days** of focused work, plus owner review time that is not counted.
+The estimates below sum to **5.25 days** of focused work, plus owner review time that is not counted.
 Each milestone is its own pull request (docs and code never mixed), squash-merged after green CI.
 
 | # | Milestone | Effort | Owner approval needed |
 | --- | --- | --- | --- |
-| M0 | Housekeeping: PR #4 and `takes prune` (section 7) | 0.5 day | No (review the PR) |
+| M0 | Housekeeping: PR #4 (done, replaced by our own PR) and `takes prune` (section 7) | 0.25 day | No (review the PR) |
 | M1 | Golden tests for the render path (6.1) | 0.5 day | No |
 | M2 | Script format, loader, timeline, profiles, card and take scenes, silent render (no audio yet) of the pipeline test in 16:9 and 1:1 | 1 day | No |
 | M3 | Audio: TTS providers, cache, ledger and guard, audition command, SFX, ducking, composition audio, loudness pass | 1 day | **Yes: the voice, after hearing the audition** |
@@ -768,7 +818,7 @@ Each milestone is its own pull request (docs and code never mixed), squash-merge
 ### Acceptance criteria
 
 **M0 Housekeeping**
-- PR #4 merged with TypeScript 7 and `@types/node` 24.x; the Dependabot ignore rule is in.
+- TypeScript 7 and `@types/node` 24.x are on `main`; the Dependabot ignore rule is in.
 - `demo-kit takes prune` dry run lists sensible candidates on the real `takes/`; `--apply` moves to trash; tests pass.
 - No change to any demo output.
 
@@ -778,7 +828,7 @@ Each milestone is its own pull request (docs and code never mixed), squash-merge
 - Test time added to CI is under 2 minutes.
 
 **M2 Script, timeline and silent render**
-- `commercial plan pipeline-test` prints a timeline and a neuron estimate and makes no network call.
+- `commercial plan pipeline-test` prints a timeline and the voice character count (the neuron estimate arrives with the rate table and ledger in M3) and makes no network call.
 - `commercial render pipeline-test` produces a silent 16:9 and 1:1 video with a card, a take window and an outro, joined by transitions.
 - The camera plan for each aspect has no planner warnings on the test page.
 - The demo `render` output is byte-identical to before for the same take (a regression test).
@@ -787,9 +837,10 @@ Each milestone is its own pull request (docs and code never mixed), squash-merge
 - `commercial audition` writes labelled samples; the owner picks a voice and records it in the script.
 - A real `commercial voice` run uses a number of neurons that matches the plan's estimate within 10%, and the ledger shows it.
 - A second run uses zero neurons (cache).
-- A forced low cap makes the run refuse before any network call.
+- A forced low cap makes the run refuse before any network call; a cap above 2,000 is rejected.
 - Final mix is within -14 LUFS +/- 1 and at most -1.0 dBTP; music ducks under every voice line (verified by a unit test and by listening).
-- The owner confirms the Cloudflare account is on the Free plan.
+- The ledger refuses a cap above 2,000 at startup, refuses on a missing or corrupt ledger, and never retries (each has a test with a stub provider that fails the test if called).
+- No Workers AI call exists anywhere in the code outside the guarded provider (a test greps for the endpoint).
 
 **M4 Captions and encodes**
 - Burned-in captions and an SRT match the voice lines; the SRT opens correctly in a standard player.
@@ -813,7 +864,7 @@ Each milestone is its own pull request (docs and code never mixed), squash-merge
 
 ### Which milestones the owner must approve
 
-- **M3: the voice choice**, after hearing `audition`, and the Free-plan confirmation.
+- **M3: the voice choice**, after hearing `audition`, and the review of the fail-closed ledger.
 - **M6: the 9:16 framing and safe-area numbers.**
 - **M7: copy, music and the final cut.**
 - M0 to M2, M4 and M5 need only the normal pull request review.
@@ -827,7 +878,7 @@ Each milestone is its own pull request (docs and code never mixed), squash-merge
 | Licences are unverified for Aura output, Kokoro and each music track | A public video could breach terms | `licenses.json` plus `check --release`; nothing public before every entry is `cleared`; this plan's licence statements are from memory and must be re-read |
 | Free voices may sound robotic | The commercial's quality depends on it | Audition before commitment; Aura 2 and Kokoro as alternatives; the owner decides by ear |
 | Cloudflare changes the free allowance, the models or the prices | The guard's rate table goes stale | The rate table carries its check date; `plan` warns when it is older than 90 days; Kokoro is the fallback |
-| The 10,000-neuron allowance is shared with other projects | The guard cannot see their use | Default cap at 50% of the allowance; the account stays on the Free plan, where overage is refused, not billed |
+| The 10,000-neuron allowance is shared with other projects, and the account is on Workers Paid, where overage is billed | The guard cannot see their use; one runaway app costs money | Fixed per-app slices (demo-kit 2,000), a never-used 2,000 buffer, fail-closed caps in every app, and later one shared account-wide ledger |
 | 9:16 needs separate phone-sized takes | The effort per product doubles for vertical | Make the mobile storyboard optional per commercial; start with 16:9 and 1:1 |
 | The 1080p profiles are not a copy of the 1280x800 ones | The planner's zoom rules depend on display width | Explicit calibration in M2 with the safe-area check as a safety net |
 | Estimated caption word timing is off | Captions look out of sync mid-line | Line start and end are exact; if it shows, add word timestamps (open question 3) |
@@ -841,11 +892,12 @@ Each milestone is its own pull request (docs and code never mixed), squash-merge
 1. **Which voice?**
    Decided by the owner after the audition in M3.
 2. **Aura 1 or Aura 2?**
-   Aura 2 is twice the neurons per character (still about 11.5% of a day for the reel); it is probably worth it, but the audition decides.
+   Aura 2 is twice the neurons per character (still 57% of demo-kit's 2,000 neuron slice for the reel, and only one such voice-over a day); it is probably worth it, but the audition decides.
 3. **Are estimated word timings enough for captions?**
    If not, use Nova 3 on the cached voice lines (472.73 neurons per audio minute on HTTP, about 4 neurons per 30 s line), also behind the ledger.
-4. **Does the Cloudflare free plan refuse or throttle past 10,000 neurons?**
-   The docs say the free allowance is 10,000 neurons per day; the exact refusal behaviour (error code) should be confirmed once in M3 with a deliberately tiny experiment on a throwaway low cap, not by exhausting the allowance.
+4. **Which error does Workers AI return at the limit?**
+   Not needed for safety: the account is on Workers Paid, so it does not refuse, it bills, and the guard never relies on a refusal.
+   Do not probe it by running over the allowance.
 5. **Which music?**
    No track is chosen; CC0 only is the default, and "no music" is a valid answer for the reel.
 6. **Where do the 9:16 phone-sized recordings come from for Wren, NetTrailers and PortfolioRank?**
