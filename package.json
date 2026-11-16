@@ -21,14 +21,14 @@
     "prepare": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
-    "@remotion/bundler": "4.0.542",
-    "@remotion/renderer": "4.0.542",
+    "@remotion/bundler": "4.0.543",
+    "@remotion/renderer": "4.0.543",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "remotion": "4.0.542"
+    "remotion": "4.0.543"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.6.6",
+    "@biomejs/biome": "2.6.7",
     "@types/node": "24.19.2",
     "@types/react": "19.3.0",
     "playwright": "1.65.0",
