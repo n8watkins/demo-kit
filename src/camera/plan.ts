@@ -1,6 +1,6 @@
 // The camera planner: a pure function from a take log to a camera path.
 // It implements the camera rules of the demo-recording playbook
-// (~/projects/dotfiles/skills/demo-recording/SKILL.md, "Camera rules"):
+// (~/dotfiles/skills/demo-recording/SKILL.md, "Camera rules"):
 //
 // - base zoom 1.15-1.3x on the area where the action happens, never 1.0;
 // - readable text at 2.0-2.5x, chosen from the font size and the display width;
